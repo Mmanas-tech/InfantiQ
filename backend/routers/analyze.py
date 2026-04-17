@@ -9,6 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Reque
 from fastapi.responses import JSONResponse
 
 from services.audio_processor import SUPPORTED_EXTENSIONS, process_audio_file
+from services.cry_detector_service import cry_detector_service
 from services.db_service import get_analyses_for_baby, save_analysis
 from services.intelligence_service import (
     apply_personalization,
@@ -86,6 +87,16 @@ async def analyze_audio(
             output.write(payload)
 
         processed = process_audio_file(temp_input_path)
+
+        is_baby_cry_signal, cry_signal_score = cry_detector_service.detect_baby_cry(
+            processed.converted_path,
+            feature_vector=processed.feature_vector,
+        )
+
+        analysis_id = str(uuid.uuid4())
+        now_dt = datetime.utcnow()
+        now = now_dt.isoformat()
+
         result = model_service.predict(
             features_dict={
                 "mel_spec": processed.mel_spec,
@@ -99,9 +110,31 @@ async def analyze_audio(
                 detail={"error": "inference_failed", "detail": "Model inference failed"},
             )
 
-        analysis_id = str(uuid.uuid4())
-        now_dt = datetime.utcnow()
-        now = now_dt.isoformat()
+        model_is_cry = bool(result.get("is_baby_cry", False))
+        model_cry_score = float(result.get("baby_cry_score", 0.0))
+        model_confidence = float(result.get("confidence", 0.0))
+
+        # Accept if either detector says cry, model gate says cry, or model confidence is very strong.
+        final_is_baby_cry = is_baby_cry_signal or model_is_cry or model_confidence >= 0.78
+        final_cry_score = max(cry_signal_score, model_cry_score, model_confidence * 0.95)
+
+        if not final_is_baby_cry:
+            response = {
+                "prediction": "non_baby_sound",
+                "confidence": final_cry_score,
+                "probabilities": {},
+                "recommendation": "No baby cry detected. Please capture a clearer baby-cry sample and try again.",
+                "recommendation_context": [
+                    "Detected audio is likely background/environmental sound",
+                    "Try moving closer to the baby and reducing TV/traffic noise",
+                ],
+                "analysis_id": analysis_id,
+                "timestamp": now,
+                "baby_id": baby_id,
+                "is_baby_cry": False,
+                "baby_cry_score": final_cry_score,
+            }
+            return response
 
         prediction = result["prediction"]
         confidence = float(result["confidence"])
@@ -152,6 +185,8 @@ async def analyze_audio(
             "personalization": personalization_meta,
             "avatar": avatar_state,
             "alert": alert,
+            "is_baby_cry": True,
+            "baby_cry_score": float(final_cry_score),
         }
 
         db_record = {

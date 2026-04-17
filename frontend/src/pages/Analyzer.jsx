@@ -3,6 +3,7 @@ import { useState } from "react";
 import BabyAvatar from "../components/BabyAvatar";
 import CryTimelineDashboard from "../components/CryTimelineDashboard";
 import FileUploader from "../components/FileUploader";
+import InsightsPanel from "../components/InsightsPanel";
 import LoadingScreen from "../components/LoadingScreen";
 import MicRecorder from "../components/MicRecorder";
 import ResultCard from "../components/ResultCard";
@@ -163,6 +164,7 @@ const Analyzer = () => {
         </div>
 
         <CryTimelineDashboard babyId={babyId.trim()} />
+        <InsightsPanel analysisResult={result} babyId={babyId.trim()} />
       </div>
     </div>
   );

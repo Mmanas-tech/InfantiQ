@@ -54,3 +54,11 @@ export const fetchTimeline = async (babyId, days = 7) => {
   });
   return data;
 };
+
+export const askInsights = async (question, context = {}) => {
+  const { data } = await api.post("/insights/ask", {
+    question,
+    context,
+  });
+  return data;
+};

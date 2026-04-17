@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from ml.train import run_training_pipeline
 from routers.analyze import router as analyze_router
 from routers.history import router as history_router
+from routers.insights import router as insights_router
 from services.db_service import (
     close_db,
     connect_db,
@@ -53,6 +54,7 @@ app.add_middleware(
 
 app.include_router(analyze_router)
 app.include_router(history_router)
+app.include_router(insights_router)
 
 
 @app.exception_handler(HTTPException)
