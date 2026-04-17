@@ -1,0 +1,13 @@
+{
+  "accuracy": 0.6944444179534912,
+  "trained_at": "2026-04-17T16:19:29.542906",
+  "total_samples": 240,
+  "classes": [
+    "hunger",
+    "pain",
+    "discomfort",
+    "sleepiness"
+  ],
+  "epochs_trained": 30,
+  "test_loss": 0.47879558801651
+}

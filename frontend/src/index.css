@@ -1,0 +1,109 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Sora:wght@500;700;800&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-1: #070724;
+  --bg-2: #0d0d35;
+  --bg-3: #16164f;
+  --accent: #8f55ff;
+  --accent-2: #5774ff;
+  --glow: rgba(143, 85, 255, 0.45);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  background: radial-gradient(circle at 20% 20%, var(--bg-3), var(--bg-1) 55%), var(--bg-1);
+  color: #fff;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Sora", sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08082a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #5f6bff, #9545ff);
+  border-radius: 999px;
+}
+
+.parallax-layer {
+  will-change: transform;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(149, 69, 255, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(149, 69, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(149, 69, 255, 0);
+  }
+}
+
+@keyframes waveShift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes waveStroke {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 120;
+  }
+}
+
+.glow-pulse {
+  animation: pulseGlow 2s infinite;
+}
+
+.sine-bg {
+  background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(136, 89, 255, 0.2),
+      rgba(136, 89, 255, 0.2) 2px,
+      transparent 2px,
+      transparent 12px
+    );
+  background-size: 200% 100%, 100% 100%;
+  animation: waveShift 1.8s linear infinite;
+}

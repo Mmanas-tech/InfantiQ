@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: infant-cry-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: infant-cry-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/infant_cry_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  mongo_data:
