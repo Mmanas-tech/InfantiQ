@@ -144,7 +144,7 @@ async def model_status() -> dict:
     return {
         "trained": model_service.ready(),
         "accuracy": float(metadata.get("accuracy", 0.0)),
-        "classes": metadata.get("classes", ["hunger", "pain", "discomfort", "sleepiness"]),
+        "classes": metadata.get("classes", ["belly_pain", "burping", "discomfort", "hungry", "tired"]),
         "total_samples": int(metadata.get("total_samples", 0)),
         "latest_run": latest_run,
         "training": bool(app.state.model_training),

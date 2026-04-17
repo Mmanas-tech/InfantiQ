@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { analyzeCry } from "../api/analyzeApi";
+import { analyzeCryWithContext } from "../api/analyzeApi";
 
 const MIN_LOADING_MS = 5000;
 
@@ -9,7 +9,7 @@ export const useAnalysis = () => {
   const [error, setError] = useState("");
   const [startedAt, setStartedAt] = useState(null);
 
-  const runAnalysis = async (audioBlob, filename) => {
+  const runAnalysis = async (audioBlob, filename, context = {}) => {
     setError("");
     setResult(null);
     setLoading(true);
@@ -17,7 +17,7 @@ export const useAnalysis = () => {
     setStartedAt(start);
 
     try {
-      const apiPromise = analyzeCry(audioBlob, filename);
+      const apiPromise = analyzeCryWithContext(audioBlob, filename, context);
       const minDelayPromise = new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS));
       const [data] = await Promise.all([apiPromise, minDelayPromise]);
       setResult(data);

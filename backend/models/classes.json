@@ -1,6 +1,7 @@
 [
-  "hunger",
-  "pain",
+  "belly_pain",
+  "burping",
   "discomfort",
-  "sleepiness"
+  "hungry",
+  "tired"
 ]

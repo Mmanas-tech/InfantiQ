@@ -53,7 +53,7 @@ def _load_samples() -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     return X_mel, X_vec, y, TARGET_CLASSES
 
 
-def _build_model(vec_dim: int) -> tf.keras.Model:
+def _build_model(vec_dim: int, num_classes: int) -> tf.keras.Model:
     mel_input = layers.Input(shape=(128, 128, 1), name="mel_input")
     x = layers.Conv2D(32, (3, 3), activation="relu", padding="same")(mel_input)
     x = layers.BatchNormalization()(x)
@@ -79,7 +79,7 @@ def _build_model(vec_dim: int) -> tf.keras.Model:
     merged = layers.Concatenate()([x, y])
     merged = layers.Dense(128, activation="relu")(merged)
     merged = layers.Dropout(0.4)(merged)
-    out = layers.Dense(4, activation="softmax")(merged)
+    out = layers.Dense(num_classes, activation="softmax")(merged)
 
     model = models.Model(inputs=[mel_input, vec_input], outputs=out)
     model.compile(
@@ -112,7 +112,7 @@ def run_training_pipeline() -> dict:
         stratify=y_temp_int,
     )
 
-    model = _build_model(vec_dim=X_vec.shape[1])
+    model = _build_model(vec_dim=X_vec.shape[1], num_classes=len(classes))
 
     cb = [
         callbacks.EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True),

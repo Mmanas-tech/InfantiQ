@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
 
 const palette = {
-  hunger: "from-amber-500 to-orange-500",
-  pain: "from-red-500 to-rose-500",
+  hungry: "from-amber-500 to-orange-500",
+  belly_pain: "from-red-500 to-rose-500",
+  burping: "from-cyan-500 to-blue-500",
   discomfort: "from-purple-500 to-fuchsia-500",
-  sleepiness: "from-sky-500 to-blue-500",
+  tired: "from-sky-500 to-blue-500",
 };
 
 const formatPct = (value) => `${Math.round(value * 100)}%`;
@@ -25,7 +26,7 @@ const ResultCard = ({ result, onReset }) => {
         transition={{ type: "spring", stiffness: 150, damping: 12 }}
         className={`mx-auto mb-6 inline-block rounded-full bg-gradient-to-r px-6 py-2 text-2xl font-extrabold uppercase tracking-wide ${tone}`}
       >
-        {result.prediction}
+        {String(result.prediction).replaceAll("_", " ")}
       </motion.div>
 
       <div className="mb-5">
@@ -45,7 +46,7 @@ const ResultCard = ({ result, onReset }) => {
         {Object.entries(result.probabilities).map(([key, value]) => (
           <div key={key}>
             <div className="mb-1 flex items-center justify-between text-sm capitalize text-white/90">
-              <span>{key}</span>
+              <span>{key.replaceAll("_", " ")}</span>
               <span>{formatPct(value)}</span>
             </div>
             <div className="h-2 rounded-full bg-white/10">
@@ -61,6 +62,19 @@ const ResultCard = ({ result, onReset }) => {
       </div>
 
       <p className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/85">{result.recommendation}</p>
+      {Array.isArray(result.recommendation_context) && result.recommendation_context.length > 0 && (
+        <ul className="mt-3 space-y-1 rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/75">
+          {result.recommendation_context.map((item) => (
+            <li key={item}>• {item}</li>
+          ))}
+        </ul>
+      )}
+
+      {result.personalization?.enabled && (
+        <p className="mt-3 text-xs text-emerald-300/90">
+          Personalized from {result.personalization.history_count} previous events for this baby.
+        </p>
+      )}
       <p className="mt-3 text-xs text-white/50">Analyzed at {new Date(result.timestamp).toLocaleString()}</p>
 
       <button

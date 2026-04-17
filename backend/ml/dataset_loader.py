@@ -6,6 +6,8 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
+import urllib.request
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -23,24 +25,28 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
 ORGANIZED_DIR = ROOT / "data" / "organized"
 LABEL_MAP_PATH = ROOT / "data" / "label_mapping.json"
-TARGET_CLASSES = ["hunger", "pain", "discomfort", "sleepiness"]
+TARGET_CLASSES = ["belly_pain", "burping", "discomfort", "hungry", "tired"]
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".m4a", ".flac"}
 KAGGLE_SEARCH_QUERY = "infant cry classification"
+DONATEACRY_GITHUB_ZIP = "https://github.com/gveres/donateacry-corpus/archive/refs/heads/master.zip"
 
 LABEL_MAPPING = {
-    "hungry": "hunger",
-    "hunger": "hunger",
-    "food": "hunger",
-    "belly_pain": "pain",
-    "pain": "pain",
-    "colic": "pain",
+    "belly_pain": "belly_pain",
+    "belly": "belly_pain",
+    "pain": "belly_pain",
+    "colic": "belly_pain",
+    "burping": "burping",
+    "burp": "burping",
+    "hungry": "hungry",
+    "hunger": "hungry",
+    "food": "hungry",
     "uncomfortable": "discomfort",
     "discomfort": "discomfort",
     "diaper": "discomfort",
     "wet": "discomfort",
-    "tired": "sleepiness",
-    "sleepy": "sleepiness",
-    "sleepiness": "sleepiness",
+    "tired": "tired",
+    "sleepy": "tired",
+    "sleepiness": "tired",
 }
 
 load_dotenv(ROOT / ".env")
@@ -73,47 +79,54 @@ def _extract_archives() -> None:
             logger.warning("Failed to extract archive %s: %s", zip_path, exc)
 
 
+def _run_kaggle_cli(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    cmd = [sys.executable, "-m", "kaggle", *args]
+    return subprocess.run(cmd, check=check, capture_output=True, text=True, env=_kaggle_env())
+
+
 def _run_kaggle_download() -> bool:
     dataset_candidates = [
         "mrdaniial/baby-cry-sounds",
         "whats2000/infant-cry-audio-corpora",
         "saurabhshahane/baby-cry-audio-classification",
         "anum23/baby-crying-sounds",
+        "serhiiutko/baby-crying-detection",
+        "nathanmclane/baby-crying-sounds-dataset",
     ]
 
     try:
-        search_cmd = ["kaggle", "datasets", "list", "-s", KAGGLE_SEARCH_QUERY]
-        search_result = subprocess.run(
-            search_cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-            env=_kaggle_env(),
-        )
+        search_result = _run_kaggle_cli(["datasets", "list", "-s", KAGGLE_SEARCH_QUERY], check=False)
         if search_result.stdout:
             logger.info("Kaggle search results for '%s':\n%s", KAGGLE_SEARCH_QUERY, search_result.stdout[:2000])
     except Exception as exc:
         logger.warning("Kaggle dataset search failed: %s", exc)
 
+    any_downloaded = False
     for dataset in dataset_candidates:
         try:
             logger.info("Trying Kaggle dataset: %s", dataset)
-            cmd = [
-                "kaggle",
-                "datasets",
-                "download",
-                "-d",
-                dataset,
-                "-p",
-                str(RAW_DIR),
-            ]
-            subprocess.run(cmd, check=True, capture_output=True, text=True, env=_kaggle_env())
+            _run_kaggle_cli(["datasets", "download", "-d", dataset, "-p", str(RAW_DIR)], check=True)
             _extract_archives()
             logger.info("Downloaded and extracted dataset: %s", dataset)
-            return True
+            any_downloaded = True
         except Exception as exc:
             logger.warning("Dataset candidate failed (%s): %s", dataset, exc)
-    return False
+
+    return any_downloaded
+
+
+def _download_donateacry_github() -> bool:
+    try:
+        archive_path = RAW_DIR / "donateacry-github-master.zip"
+        logger.info("Downloading Donate-a-Cry corpus from GitHub...")
+        urllib.request.urlretrieve(DONATEACRY_GITHUB_ZIP, archive_path)
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(RAW_DIR)
+        logger.info("Downloaded and extracted GitHub Donate-a-Cry corpus")
+        return True
+    except Exception as exc:
+        logger.warning("Donate-a-Cry GitHub download failed: %s", exc)
+        return False
 
 
 def _tokenize_path(path: Path) -> list[str]:
@@ -187,8 +200,7 @@ def _supplement_with_esc50(class_counts: dict[str, int], target_per_class: int =
     logger.info("Supplementing from ESC-50 for class deficits: %s", deficits)
     esc_dataset = "karolpiczak/esc50"
     try:
-        cmd = ["kaggle", "datasets", "download", "-d", esc_dataset, "-p", str(RAW_DIR)]
-        subprocess.run(cmd, check=True, capture_output=True, text=True, env=_kaggle_env())
+        _run_kaggle_cli(["datasets", "download", "-d", esc_dataset, "-p", str(RAW_DIR)], check=True)
         _extract_archives()
     except Exception as exc:
         logger.warning("ESC-50 download failed: %s", exc)
@@ -270,12 +282,14 @@ def _generate_synthetic_dataset(per_class: int = 60) -> dict:
         for i in range(per_class):
             length = int(TARGET_SR * 3)
             t = np.linspace(0, 3, length, endpoint=False)
-            if cls == "hunger":
+            if cls == "hungry":
                 sig = 0.35 * np.sin(2 * np.pi * 420 * t) + 0.1 * np.sin(2 * np.pi * 180 * t)
-            elif cls == "pain":
+            elif cls == "belly_pain":
                 sig = 0.55 * np.sign(np.sin(2 * np.pi * 680 * t))
             elif cls == "discomfort":
                 sig = 0.25 * np.sin(2 * np.pi * 300 * t) + 0.15 * np.random.randn(length)
+            elif cls == "burping":
+                sig = 0.3 * np.sin(2 * np.pi * 520 * t) + 0.25 * np.sin(2 * np.pi * 70 * t)
             else:
                 sig = 0.18 * np.sin(2 * np.pi * 220 * t)
 
@@ -316,13 +330,26 @@ def summarize_dataset() -> dict:
 def prepare_dataset() -> dict:
     _ensure_dirs()
 
+    force_refresh = str(os.getenv("FORCE_DATA_REFRESH", "false")).strip().lower() in {"1", "true", "yes"}
+    always_try_download = str(os.getenv("ALWAYS_TRY_KAGGLE_DOWNLOAD", "true")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+    if force_refresh:
+        logger.warning("FORCE_DATA_REFRESH enabled: rebuilding organized dataset from available raw sources")
+        shutil.rmtree(ORGANIZED_DIR, ignore_errors=True)
+        _ensure_dirs()
+
     existing = [p for p in ORGANIZED_DIR.rglob("*.wav")]
-    if existing:
+    if existing and not force_refresh:
         logger.info("Found existing organized dataset. Skipping download.")
         return summarize_dataset()
 
     raw_files = _collect_raw_audio_files() if _raw_dir_has_audio() else []
-    if not raw_files:
+    if always_try_download or not raw_files:
+        _download_donateacry_github()
         _run_kaggle_download()
         raw_files = _collect_raw_audio_files()
 

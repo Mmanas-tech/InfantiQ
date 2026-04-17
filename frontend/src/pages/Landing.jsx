@@ -9,7 +9,7 @@ const steps = [
 ];
 
 const stats = [
-  { label: "Cry Types Detected", target: 4, suffix: "" },
+  { label: "Cry Types Detected", target: 5, suffix: "" },
   { label: "Accuracy", target: 98, suffix: "%" },
   { label: "Analysis Time", target: 3, suffix: "s", prefix: "< " },
 ];

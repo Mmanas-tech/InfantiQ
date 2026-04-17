@@ -5,20 +5,27 @@ import tempfile
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from services.audio_processor import SUPPORTED_EXTENSIONS, process_audio_file
-from services.db_service import save_analysis
+from services.db_service import get_analyses_for_baby, save_analysis
+from services.intelligence_service import (
+    apply_personalization,
+    build_recommendation,
+    infer_avatar_state,
+    parse_iso_datetime,
+)
 from services.model_service import model_service
 
 router = APIRouter(prefix="/api", tags=["analyze"])
 
 RECOMMENDATIONS = {
-    "hunger": "Your baby is likely hungry. Try feeding them now or within the next 10-15 minutes.",
-    "pain": "Your baby may be in pain or discomfort. Check for gas, colic, or physical discomfort. Consult a pediatrician if crying persists.",
+    "belly_pain": "Your baby may have belly pain. Try gentle burping, tummy massage, or comforting holds and monitor closely.",
+    "burping": "Your baby likely needs burping. Hold upright and gently pat their back for a few minutes.",
     "discomfort": "Your baby seems uncomfortable. Check their diaper, clothing, temperature, or positioning.",
-    "sleepiness": "Your baby is sleepy. Try a calm environment, gentle rocking, or a lullaby to help them drift off.",
+    "hungry": "Your baby is likely hungry. Try feeding them now or within the next 10-15 minutes.",
+    "tired": "Your baby is likely tired. Try a calm environment, dim lights, and soothing rocking.",
 }
 
 
@@ -39,6 +46,10 @@ async def analyze_audio(
     request: Request,
     background_tasks: BackgroundTasks,
     audio: UploadFile = File(...),
+    baby_id: str | None = Form(default=None),
+    last_feeding_at: str | None = Form(default=None),
+    last_sleep_at: str | None = Form(default=None),
+    parent_away: bool = Form(default=False),
 ):
     max_size_mb = float(os.getenv("MAX_AUDIO_SIZE_MB", "10"))
     max_size_bytes = int(max_size_mb * 1024 * 1024)
@@ -89,29 +100,76 @@ async def analyze_audio(
             )
 
         analysis_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now_dt = datetime.utcnow()
+        now = now_dt.isoformat()
+
         prediction = result["prediction"]
-        recommendation = RECOMMENDATIONS.get(prediction, "No recommendation available")
+        confidence = float(result["confidence"])
+        probabilities = result["probabilities"]
+
+        baby_history: list[dict] = []
+        personalization_meta = {"enabled": False, "reason": "baby_id not supplied", "history_count": 0}
+        if baby_id:
+            baby_history = await get_analyses_for_baby(baby_id=baby_id, limit=250)
+            personalized_probs, personalization_meta = apply_personalization(
+                probabilities=probabilities,
+                baby_history=baby_history,
+                now=now_dt,
+            )
+            probabilities = personalized_probs
+            prediction = max(probabilities, key=probabilities.get)
+            confidence = float(probabilities[prediction])
+
+        recommendation_payload = build_recommendation(
+            prediction=prediction,
+            confidence=confidence,
+            now=now_dt,
+            last_feeding_at=parse_iso_datetime(last_feeding_at),
+            last_sleep_at=parse_iso_datetime(last_sleep_at),
+            baby_history=baby_history,
+        )
+        recommendation = recommendation_payload["message"]
+        recommendation_context = recommendation_payload["context"]
+
+        avatar_state = infer_avatar_state(prediction)
+        alert = None
+        if parent_away and confidence >= 0.55:
+            alert = {
+                "should_notify": True,
+                "title": "InfantiQ Alert",
+                "body": f"Baby seems {prediction.replace('_', ' ')} ({round(confidence * 100)}% confidence)",
+            }
 
         response = {
             "prediction": prediction,
-            "confidence": result["confidence"],
-            "probabilities": result["probabilities"],
+            "confidence": confidence,
+            "probabilities": probabilities,
             "recommendation": recommendation,
+            "recommendation_context": recommendation_context,
             "analysis_id": analysis_id,
             "timestamp": now,
+            "baby_id": baby_id,
+            "personalization": personalization_meta,
+            "avatar": avatar_state,
+            "alert": alert,
         }
 
         db_record = {
             "analysis_id": analysis_id,
-            "timestamp": datetime.utcnow(),
+            "timestamp": now_dt,
             "prediction": prediction,
-            "confidence": result["confidence"],
-            "probabilities": result["probabilities"],
+            "confidence": confidence,
+            "probabilities": probabilities,
             "audio_duration_seconds": processed.duration_seconds,
             "audio_format": extension,
             "file_size_bytes": len(payload),
             "recommendation": recommendation,
+            "recommendation_context": recommendation_context,
+            "baby_id": baby_id,
+            "last_feeding_at": last_feeding_at,
+            "last_sleep_at": last_sleep_at,
+            "parent_away": parent_away,
+            "personalization": personalization_meta,
         }
         background_tasks.add_task(save_analysis, db_record)
 

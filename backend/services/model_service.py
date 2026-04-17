@@ -19,7 +19,7 @@ class ModelService:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.model = None
-            cls._instance.classes = ["hunger", "pain", "discomfort", "sleepiness"]
+            cls._instance.classes = ["belly_pain", "burping", "discomfort", "hungry", "tired"]
             cls._instance.metadata = {
                 "accuracy": 0.0,
                 "total_samples": 0,

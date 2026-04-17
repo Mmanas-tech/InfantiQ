@@ -9,6 +9,7 @@ const ACCEPT = {
   "audio/ogg": [".ogg"],
   "audio/mp4": [".m4a"],
   "audio/x-m4a": [".m4a"],
+  "audio/webm": [".webm"],
 };
 
 const formatSize = (bytes) => `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -17,7 +18,7 @@ const FileUploader = ({ file, setFile, onAnalyze, loading, error, setError }) =>
   const onDrop = useCallback(
     (acceptedFiles, rejectedFiles) => {
       if (rejectedFiles?.length) {
-        setError("Only wav, mp3, ogg, m4a files up to 10MB are supported.");
+        setError("Only wav, mp3, ogg, m4a, webm files up to 10MB are supported.");
         return;
       }
       if (!acceptedFiles?.length) return;
@@ -57,7 +58,7 @@ const FileUploader = ({ file, setFile, onAnalyze, loading, error, setError }) =>
       >
         <input {...getInputProps()} />
         <p className="text-lg font-semibold">Drag & drop audio, or click to browse</p>
-        <p className="mt-2 text-sm text-white/70">Supports .wav, .mp3, .ogg, .m4a (up to 10MB)</p>
+        <p className="mt-2 text-sm text-white/70">Supports .wav, .mp3, .ogg, .m4a, .webm (up to 10MB)</p>
       </motion.div>
 
       {file && (

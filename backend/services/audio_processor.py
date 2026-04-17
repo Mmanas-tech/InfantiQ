@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import librosa
 import numpy as np
@@ -17,6 +19,59 @@ TARGET_SR = 16000
 TARGET_SECONDS = 3
 TARGET_SAMPLES = TARGET_SR * TARGET_SECONDS
 SUPPORTED_EXTENSIONS = {"wav", "mp3", "ogg", "m4a", "webm"}
+
+
+def _candidate_ffmpeg_paths() -> list[tuple[str, str]]:
+    ffmpeg_bin = os.getenv("FFMPEG_BINARY")
+    ffprobe_bin = os.getenv("FFPROBE_BINARY")
+    candidates: list[tuple[str, str]] = []
+
+    if ffmpeg_bin and ffprobe_bin:
+        candidates.append((ffmpeg_bin, ffprobe_bin))
+
+    ffmpeg_which = shutil.which("ffmpeg")
+    ffprobe_which = shutil.which("ffprobe")
+    if ffmpeg_which and ffprobe_which:
+        candidates.append((ffmpeg_which, ffprobe_which))
+
+    local_app_data = os.getenv("LOCALAPPDATA", "")
+    if local_app_data:
+        winget_dir = (
+            Path(local_app_data)
+            / "Microsoft"
+            / "WinGet"
+            / "Packages"
+            / "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        )
+        if winget_dir.exists():
+            ffmpeg_files = list(winget_dir.rglob("ffmpeg.exe"))
+            ffprobe_files = list(winget_dir.rglob("ffprobe.exe"))
+            if ffmpeg_files and ffprobe_files:
+                candidates.append((str(ffmpeg_files[0]), str(ffprobe_files[0])))
+
+    return candidates
+
+
+def _configure_ffmpeg() -> None:
+    for ffmpeg_path, ffprobe_path in _candidate_ffmpeg_paths():
+        if not (os.path.exists(ffmpeg_path) and os.path.exists(ffprobe_path)):
+            continue
+
+        ffmpeg_dir = str(Path(ffmpeg_path).parent)
+        current_path = os.getenv("PATH", "")
+        if ffmpeg_dir not in current_path:
+            os.environ["PATH"] = f"{ffmpeg_dir};{current_path}" if current_path else ffmpeg_dir
+
+        AudioSegment.converter = ffmpeg_path
+        os.environ["FFMPEG_BINARY"] = ffmpeg_path
+        os.environ["FFPROBE_BINARY"] = ffprobe_path
+        logger.info("Configured ffmpeg backend: %s", ffmpeg_path)
+        return
+
+    logger.warning("ffmpeg/ffprobe not found. Audio conversion for compressed formats may fail.")
+
+
+_configure_ffmpeg()
 
 
 @dataclass
@@ -33,6 +88,34 @@ def _normalize_length(signal: np.ndarray) -> np.ndarray:
     elif len(signal) > TARGET_SAMPLES:
         signal = signal[:TARGET_SAMPLES]
     return signal
+
+
+def _reduce_background_noise(signal: np.ndarray, sr: int) -> np.ndarray:
+    if len(signal) < sr // 2:
+        return signal
+
+    stft = librosa.stft(signal, n_fft=1024, hop_length=256)
+    magnitude = np.abs(stft)
+    phase = np.angle(stft)
+
+    frame_energy = np.mean(magnitude, axis=0)
+    if frame_energy.size == 0:
+        return signal
+
+    threshold = np.percentile(frame_energy, 20)
+    noise_frames = magnitude[:, frame_energy <= threshold]
+    if noise_frames.size == 0:
+        return signal
+
+    noise_profile = np.mean(noise_frames, axis=1, keepdims=True)
+    cleaned_mag = np.maximum(magnitude - (1.15 * noise_profile), 0.0)
+    cleaned_stft = cleaned_mag * np.exp(1j * phase)
+    denoised = librosa.istft(cleaned_stft, hop_length=256, length=len(signal))
+
+    peak = np.max(np.abs(denoised))
+    if peak > 0:
+        denoised = denoised / peak * min(peak, 1.0)
+    return denoised.astype(np.float32)
 
 
 def _resize_mel(mel_db: np.ndarray, target_shape: tuple[int, int] = (128, 128)) -> np.ndarray:
@@ -69,6 +152,7 @@ def extract_features(wav_path: str) -> tuple[np.ndarray, np.ndarray, float]:
     if duration < 0.5:
         raise ValueError("Audio too short. Minimum duration is 0.5 seconds")
 
+    signal = _reduce_background_noise(signal, sr)
     signal = _normalize_length(signal)
 
     mfcc = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=40)
