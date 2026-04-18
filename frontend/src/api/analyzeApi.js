@@ -30,6 +30,7 @@ export const analyzeCryWithContext = async (
   if (context.lastFeedingAt) formData.append("last_feeding_at", context.lastFeedingAt);
   if (context.lastSleepAt) formData.append("last_sleep_at", context.lastSleepAt);
   if (typeof context.parentAway === "boolean") formData.append("parent_away", String(context.parentAway));
+  if (context.sourceType) formData.append("source_type", context.sourceType);
 
   const { data } = await api.post("/analyze", formData, {
     headers: {

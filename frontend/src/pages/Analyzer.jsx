@@ -29,7 +29,7 @@ const Analyzer = () => {
   const { loading, result, error, startedAt, runAnalysis, reset } = useAnalysis();
   useCaretakerAlerts({ result, parentAway });
 
-  const handleAnalyze = async (blob, filename) => {
+  const handleAnalyze = async (blob, filename, options = {}) => {
     setLocalError("");
     try {
       await runAnalysis(blob, filename, {
@@ -37,6 +37,7 @@ const Analyzer = () => {
         lastFeedingAt: lastFeedingAt ? new Date(lastFeedingAt).toISOString() : "",
         lastSleepAt: lastSleepAt ? new Date(lastSleepAt).toISOString() : "",
         parentAway,
+        sourceType: options.sourceType || "upload",
       });
     } catch {
       // handled by hook

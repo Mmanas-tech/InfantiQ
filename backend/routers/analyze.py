@@ -51,6 +51,7 @@ async def analyze_audio(
     last_feeding_at: str | None = Form(default=None),
     last_sleep_at: str | None = Form(default=None),
     parent_away: bool = Form(default=False),
+    source_type: str = Form(default="upload"),
 ):
     max_size_mb = float(os.getenv("MAX_AUDIO_SIZE_MB", "10"))
     max_size_bytes = int(max_size_mb * 1024 * 1024)
@@ -114,8 +115,18 @@ async def analyze_audio(
         model_cry_score = float(result.get("baby_cry_score", 0.0))
         model_confidence = float(result.get("confidence", 0.0))
 
-        # Accept if either detector says cry, model gate says cry, or model confidence is very strong.
-        final_is_baby_cry = is_baby_cry_signal or model_is_cry or model_confidence >= 0.78
+        source_type = (source_type or "upload").strip().lower()
+
+        # For mic input, be stricter to reduce false positives from speaker playback/noise.
+        if source_type == "mic":
+            final_is_baby_cry = (
+                (is_baby_cry_signal and model_is_cry)
+                or (model_confidence >= 0.90 and cry_signal_score >= 0.62)
+            )
+        else:
+            # For uploads, allow either gate or strong classifier confidence.
+            final_is_baby_cry = is_baby_cry_signal or model_is_cry or model_confidence >= 0.78
+
         final_cry_score = max(cry_signal_score, model_cry_score, model_confidence * 0.95)
 
         if not final_is_baby_cry:
@@ -204,6 +215,7 @@ async def analyze_audio(
             "last_feeding_at": last_feeding_at,
             "last_sleep_at": last_sleep_at,
             "parent_away": parent_away,
+            "source_type": source_type,
             "personalization": personalization_meta,
         }
         background_tasks.add_task(save_analysis, db_record)

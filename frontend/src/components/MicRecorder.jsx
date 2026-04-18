@@ -47,7 +47,7 @@ const MicRecorder = ({ onAnalyze, loading, setError }) => {
       setError("Recording failed. Please try again.");
       return;
     }
-    onAnalyze(blob, "recording.webm");
+    onAnalyze(blob, "recording.webm", { sourceType: "mic" });
   };
 
   return (
