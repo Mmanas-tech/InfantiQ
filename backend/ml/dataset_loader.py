@@ -4,6 +4,7 @@ import csv
 import json
 import logging
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -274,6 +275,45 @@ def _supplement_with_esc50(class_counts: dict[str, int], target_per_class: int =
     return class_counts
 
 
+def _rebalance_dataset(target_per_class: int = 300) -> dict[str, int]:
+    rng = random.Random(42)
+    rebalanced_counts: dict[str, int] = {c: 0 for c in TARGET_CLASSES}
+
+    for cls in TARGET_CLASSES:
+        cls_dir = ORGANIZED_DIR / cls
+        cls_dir.mkdir(parents=True, exist_ok=True)
+        files = sorted(cls_dir.glob("*.wav"))
+
+        if len(files) > target_per_class:
+            keep_set = set(rng.sample(files, target_per_class))
+            for wav in files:
+                if wav not in keep_set:
+                    wav.unlink(missing_ok=True)
+            files = sorted(cls_dir.glob("*.wav"))
+
+        if not files:
+            rebalanced_counts[cls] = 0
+            continue
+
+        cursor = 0
+        while len(files) < target_per_class:
+            src = files[cursor % len(files)]
+            aug_outputs = _augment_file(src, cls, cursor + 100000)
+            for aug in aug_outputs:
+                if _duration_seconds(aug) >= 0.3:
+                    files.append(aug)
+                    if len(files) >= target_per_class:
+                        break
+                else:
+                    aug.unlink(missing_ok=True)
+            cursor += 1
+
+        rebalanced_counts[cls] = len(files)
+
+    logger.info("Rebalanced class counts: %s", rebalanced_counts)
+    return rebalanced_counts
+
+
 def _generate_synthetic_dataset(per_class: int = 60) -> dict:
     logger.warning("Generating synthetic fallback dataset")
     for cls in TARGET_CLASSES:
@@ -393,20 +433,8 @@ def prepare_dataset() -> dict:
             indent=2,
         )
 
-    for cls in TARGET_CLASSES:
-        samples = list((ORGANIZED_DIR / cls).glob("*.wav"))
-        if len(samples) < 50:
-            required = 50 - len(samples)
-            cursor = 0
-            while required > 0 and samples:
-                src = samples[cursor % len(samples)]
-                aug_outputs = _augment_file(src, cls, cursor)
-                for aug in aug_outputs:
-                    if _duration_seconds(aug) >= 0.3:
-                        required -= 1
-                        if required <= 0:
-                            break
-                cursor += 1
+    target_per_class = int(os.getenv("TARGET_SAMPLES_PER_CLASS", "300"))
+    _rebalance_dataset(target_per_class=max(50, target_per_class))
 
     final_summary = summarize_dataset()
 

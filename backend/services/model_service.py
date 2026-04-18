@@ -47,7 +47,7 @@ class ModelService:
 
     def load(self, model_path: str, classes_path: str, metadata_path: str) -> bool:
         try:
-            if not os.path.exists(model_path):
+            if not os.path.exists(model_path) or os.path.getsize(model_path) == 0:
                 logger.warning("Model not trained. POST /api/model/train to train.")
                 self.model = None
                 return False

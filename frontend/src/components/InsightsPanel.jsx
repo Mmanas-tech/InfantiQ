@@ -34,10 +34,14 @@ const InsightsPanel = ({ analysisResult, babyId }) => {
       const data = await askInsights(q, context);
       setAnswer(data.answer || "No answer returned.");
     } catch (err) {
-      const detail = err?.response?.data?.detail;
+      const payload = err?.response?.data;
+      const detail = payload?.detail;
       const msg =
+        (typeof payload?.detail === "string" && payload.detail) ||
+        (typeof payload?.error === "string" && payload.error) ||
         (typeof detail?.detail === "string" && detail.detail) ||
         (typeof detail?.error === "string" && detail.error) ||
+        (typeof err?.message === "string" && err.message) ||
         "Could not fetch insights right now.";
       setError(msg);
     } finally {

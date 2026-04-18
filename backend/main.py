@@ -122,8 +122,8 @@ async def startup_event() -> None:
     app.state.model_ready = model_service.load(MODEL_PATH, CLASSES_PATH, METADATA_PATH)
     app.state.model_training = False
 
-    if not os.path.exists(MODEL_PATH):
-        logger.warning("No model found. Starting automatic training pipeline...")
+    if not app.state.model_ready:
+        logger.warning("Model unavailable or invalid. Starting automatic training pipeline...")
         run_id = str(uuid.uuid4())
         asyncio.create_task(_run_training_job(run_id))
 
@@ -137,6 +137,16 @@ async def shutdown_event() -> None:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "model_loaded": bool(model_service.ready())}
+
+
+@app.get("/")
+async def root() -> dict:
+    return {
+        "status": "ok",
+        "message": "InfantiQ backend is running.",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
 
 
 @app.get("/api/model/status")

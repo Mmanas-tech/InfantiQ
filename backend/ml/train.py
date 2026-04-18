@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras import callbacks, layers, models
 
 from ml.dataset_loader import ORGANIZED_DIR, TARGET_CLASSES, prepare_dataset
@@ -112,6 +113,14 @@ def run_training_pipeline() -> dict:
         stratify=y_temp_int,
     )
 
+    y_train_int = np.argmax(y_train, axis=1)
+    class_weight_values = compute_class_weight(
+        class_weight="balanced",
+        classes=np.arange(len(classes)),
+        y=y_train_int,
+    )
+    class_weight = {int(i): float(w) for i, w in enumerate(class_weight_values)}
+
     model = _build_model(vec_dim=X_vec.shape[1], num_classes=len(classes))
 
     cb = [
@@ -128,6 +137,7 @@ def run_training_pipeline() -> dict:
         epochs=100,
         batch_size=32,
         callbacks=cb,
+        class_weight=class_weight,
         verbose=1,
     )
 
